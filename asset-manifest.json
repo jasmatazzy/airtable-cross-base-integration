@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/airtable-cross-base-integration/static/css/main.7b2bba39.css",
-    "main.js": "/airtable-cross-base-integration/static/js/main.c3df322c.js",
+    "main.js": "/airtable-cross-base-integration/static/js/main.4b0e6f76.js",
     "index.html": "/airtable-cross-base-integration/index.html",
     "main.7b2bba39.css.map": "/airtable-cross-base-integration/static/css/main.7b2bba39.css.map",
-    "main.c3df322c.js.map": "/airtable-cross-base-integration/static/js/main.c3df322c.js.map"
+    "main.4b0e6f76.js.map": "/airtable-cross-base-integration/static/js/main.4b0e6f76.js.map"
   },
   "entrypoints": [
     "static/css/main.7b2bba39.css",
-    "static/js/main.c3df322c.js"
+    "static/js/main.4b0e6f76.js"
   ]
 }
