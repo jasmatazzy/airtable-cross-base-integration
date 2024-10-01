@@ -25,7 +25,7 @@ const bases = [
   // cnn
   { id: 'appPYGtuPHa89h0q4', tables: ['tbltsUZy6eLZ9ZITK'] },
   // nyt
-  { id: 'appn1reQKhPVIKYog', tables: ['tblFADrbLoMDYSgfZ'] }
+  { id: 'appn1reQKhPVIKYog', tables: ['tblFADrbLoMDYSgfZ'] },
   //active table
   { id: 'appp48r1INvb4LoGV', tables: ['tbl5CnEjWJ7zDhJVv'] }
 ];
