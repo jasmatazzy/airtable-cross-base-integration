@@ -10,7 +10,6 @@ import {
   TableRow, 
   Paper, 
   CircularProgress,
-  Chip,
   Autocomplete,
   Button,
   Pagination,
@@ -40,7 +39,8 @@ const getCachedData = (key) => {
 };
 
 const setCachedData = (key, data) => {
-  localStorage.setItem(key, JSON.stringify(data));
+  // localStorage.setItem(key, JSON.stringify(data));
+  console.log('i will be localStorage upon further implementation')
 };
 
 const AirtableSearchComponent = () => {
