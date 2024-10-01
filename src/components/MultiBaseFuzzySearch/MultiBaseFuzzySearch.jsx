@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Fuse from 'fuse.js';
 import { 
   TextField, 
@@ -26,10 +26,22 @@ const bases = [
   { id: 'appPYGtuPHa89h0q4', tables: ['tbltsUZy6eLZ9ZITK'] },
   // nyt
   { id: 'appn1reQKhPVIKYog', tables: ['tblFADrbLoMDYSgfZ'] }
+  //active table
+  { id: 'appp48r1INvb4LoGV', tables: ['tbl5CnEjWJ7zDhJVv'] }
 ];
 
 const AIRTABLE_API_KEY = process.env.REACT_APP_AIRTABLE_API_KEY;
-const RECORDS_PER_PAGE = 10;
+const RECORDS_PER_PAGE = 20;
+
+// Utility functions for caching
+const getCachedData = (key) => {
+  const cachedData = localStorage.getItem(key);
+  return cachedData ? JSON.parse(cachedData) : null;
+};
+
+const setCachedData = (key, data) => {
+  localStorage.setItem(key, JSON.stringify(data));
+};
 
 const AirtableSearchComponent = () => {
   const [allRecords, setAllRecords] = useState([]);
@@ -47,25 +59,43 @@ const AirtableSearchComponent = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [aggregatedData, setAggregatedData] = useState(null);
   const [drillDownId, setDrillDownId] = useState(null);
+  const [lastFetchTime, setLastFetchTime] = useState(null);
 
-  useEffect(() => {
-    const fetchAllRecords = async () => {
-      setLoading(true);
-      let records = [];
-      let allFields = new Set();
-      let yearsSet = new Set();
-      let authorsSet = new Set();
-      let publicationsSet = new Set();
-    
-      for (const base of bases) {
-        for (const tableName of base.tables) {
+  const fetchAllRecords = useCallback(async (forceRefresh = false) => {
+    setLoading(true);
+    const cacheKey = 'airtableRecordsCache';
+    const cacheDuration = 60 * 60 * 1000; // 1 hour in milliseconds
+
+    const cachedData = getCachedData(cacheKey);
+    const currentTime = new Date().getTime();
+
+    if (!forceRefresh && cachedData && cachedData.timestamp && (currentTime - cachedData.timestamp < cacheDuration)) {
+      setAllRecords(cachedData.records);
+      setFields(cachedData.fields);
+      setYears(cachedData.years);
+      setAuthors(cachedData.authors);
+      setPublications(cachedData.publications);
+      setLastFetchTime(new Date(cachedData.timestamp));
+      setLoading(false);
+      setAggregatedData(aggregateData(cachedData.records));
+      return;
+    }
+
+    let records = [];
+    let allFields = new Set();
+    let yearsSet = new Set();
+    let authorsSet = new Set();
+    let publicationsSet = new Set();
+
+    for (const base of bases) {
+      for (const tableName of base.tables) {
+        let offset = null;
+        do {
           try {
-            const response = await fetch(
-              `https://api.airtable.com/v0/${base.id}/${tableName}`,
-              {
-                headers: { Authorization: `Bearer ${AIRTABLE_API_KEY}` }
-              }
-            );
+            const url = `https://api.airtable.com/v0/${base.id}/${tableName}${offset ? `?offset=${offset}` : ''}`;
+            const response = await fetch(url, {
+              headers: { Authorization: `Bearer ${AIRTABLE_API_KEY}` }
+            });
             
             if (!response.ok) {
               throw new Error(`HTTP error! status: ${response.status}`);
@@ -79,7 +109,8 @@ const AirtableSearchComponent = () => {
             }));
             
             records = [...records, ...tableRecords];
-    
+            
+            // Process records and update sets
             tableRecords.forEach(record => {
               Object.keys(record.fields).forEach(field => allFields.add(field));
               if (record.fields.Year) yearsSet.add(record.fields.Year);
@@ -90,30 +121,45 @@ const AirtableSearchComponent = () => {
                 } else if (Array.isArray(record.fields.Author)) {
                   record.fields.Author.forEach(author => authorsSet.add(author.trim()));
                 }
-                // If Author is neither a string nor an array, we'll skip it
               }
               if (record.fields.Publication) publicationsSet.add(record.fields.Publication);
             });
+
+            offset = data.offset;
           } catch (error) {
             console.error(`Error fetching records from ${base.id}, table ${tableName}:`, error);
+            break;
           }
-        }
+        } while (offset);
       }
-    
-      setAllRecords(records);
-      setFields(Array.from(allFields));
-      setYears([...yearsSet].sort((a, b) => b - a));
-      setAuthors([...authorsSet].sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'})));
-      setPublications([...publicationsSet].sort());
-      setLoading(false);
-    
-      // Perform initial aggregation
-      const initialAggregation = aggregateData(records);
-      setAggregatedData(initialAggregation);
+    }
+
+    const processedData = {
+      records,
+      fields: Array.from(allFields),
+      years: [...yearsSet].sort((a, b) => b - a),
+      authors: [...authorsSet].sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'})),
+      publications: [...publicationsSet].sort(),
+      timestamp: currentTime
     };
 
-    fetchAllRecords();
+    setCachedData(cacheKey, processedData);
+
+    setAllRecords(records);
+    setFields(processedData.fields);
+    setYears(processedData.years);
+    setAuthors(processedData.authors);
+    setPublications(processedData.publications);
+    setLastFetchTime(new Date(currentTime));
+    setLoading(false);
+
+    const initialAggregation = aggregateData(records);
+    setAggregatedData(initialAggregation);
   }, []);
+
+  useEffect(() => {
+    fetchAllRecords();
+  }, [fetchAllRecords]);
 
   useEffect(() => {
     // Check for drill-down parameter in URL
@@ -156,51 +202,50 @@ const AirtableSearchComponent = () => {
     setAggregatedData(newAggregation);
   }, [searchTerm, yearFilters, authorFilters, publicationFilters, allRecords, fuse]);
 
-const aggregateData = (records) => {
-  const aggregation = {
-    totalRecords: records.length,
-    recordsByYear: {},
-    recordsByAuthor: {},
-    recordsByPublication: {},
-    recordsWithNoYear: 0,
-    recordsWithNoAuthor: 0,
-    recordsWithNoPublication: 0
+  const aggregateData = (records) => {
+    const aggregation = {
+      totalRecords: records.length,
+      recordsByYear: {},
+      recordsByAuthor: {},
+      recordsByPublication: {},
+      recordsWithNoYear: 0,
+      recordsWithNoAuthor: 0,
+      recordsWithNoPublication: 0
+    };
+
+    records.forEach(record => {
+      // Aggregate by year
+      if (record.fields.Year) {
+        aggregation.recordsByYear[record.fields.Year] = (aggregation.recordsByYear[record.fields.Year] || 0) + 1;
+      } else {
+        aggregation.recordsWithNoYear++;
+      }
+
+      // Aggregate by author
+      if (record.fields.Author && typeof record.fields.Author === 'string') {
+        const authors = record.fields.Author.split(/\s*,\s*|\s+and\s+|\s*;\s*/);
+        authors.forEach(author => {
+          const trimmedAuthor = author.trim();
+          aggregation.recordsByAuthor[trimmedAuthor] = (aggregation.recordsByAuthor[trimmedAuthor] || 0) + 1;
+        });
+      } else if (Array.isArray(record.fields.Author)) {
+        record.fields.Author.forEach(author => {
+          aggregation.recordsByAuthor[author] = (aggregation.recordsByAuthor[author] || 0) + 1;
+        });
+      } else {
+        aggregation.recordsWithNoAuthor++;
+      }
+
+      // Aggregate by publication
+      if (record.fields.Publication) {
+        aggregation.recordsByPublication[record.fields.Publication] = (aggregation.recordsByPublication[record.fields.Publication] || 0) + 1;
+      } else {
+        aggregation.recordsWithNoPublication++;
+      }
+    });
+
+    return aggregation;
   };
-
-  records.forEach(record => {
-    // Aggregate by year
-    if (record.fields.Year) {
-      aggregation.recordsByYear[record.fields.Year] = (aggregation.recordsByYear[record.fields.Year] || 0) + 1;
-    } else {
-      aggregation.recordsWithNoYear++;
-    }
-
-    // Aggregate by author
-    if (record.fields.Author && typeof record.fields.Author === 'string') {
-      const authors = record.fields.Author.split(/\s*,\s*|\s+and\s+|\s*;\s*/);
-      authors.forEach(author => {
-        const trimmedAuthor = author.trim();
-        aggregation.recordsByAuthor[trimmedAuthor] = (aggregation.recordsByAuthor[trimmedAuthor] || 0) + 1;
-      });
-    } else if (Array.isArray(record.fields.Author)) {
-      record.fields.Author.forEach(author => {
-        aggregation.recordsByAuthor[author] = (aggregation.recordsByAuthor[author] || 0) + 1;
-      });
-    } else {
-      aggregation.recordsWithNoAuthor++;
-    }
-
-    // Aggregate by publication
-    if (record.fields.Publication) {
-      aggregation.recordsByPublication[record.fields.Publication] = (aggregation.recordsByPublication[record.fields.Publication] || 0) + 1;
-    } else {
-      aggregation.recordsWithNoPublication++;
-    }
-  });
-
-  return aggregation;
-};
-
 
   const paginatedRecords = filteredRecords.slice(
     (page - 1) * RECORDS_PER_PAGE,
@@ -246,9 +291,26 @@ const aggregateData = (records) => {
     );
   };
 
+  const handleRefresh = () => {
+    fetchAllRecords(true);
+  };
+
+
   return (
     <Paper elevation={3} style={{ padding: '20px' }}>
       {renderAggregationCards()}
+      <Button 
+        variant="outlined" 
+        onClick={handleRefresh}
+        style={{ marginBottom: '20px', marginLeft: '10px' }}
+      >
+        Refresh Data
+      </Button>
+      {lastFetchTime && (
+        <Typography variant="body2" style={{ marginBottom: '20px' }}>
+          Last updated: {lastFetchTime.toLocaleString()}
+        </Typography>
+      )}
       <TextField
         fullWidth
         label="Search"

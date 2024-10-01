@@ -1,6 +1,6 @@
 import React from "react";
 import FuzzySearchDropdown from "../FuzzySearchDropdown/FuzzySearchDropdown";
-import MultiBaseFuzzySearch from "../MultiBaseFuzzySearch/MutliBaseFuzzySearch";
+import MultiBaseFuzzySearch from "../MultiBaseFuzzySearch/MultiBaseFuzzySearch";
 
 const UserInterface = () => {
   return (
