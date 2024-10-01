@@ -1,5 +1,6 @@
 {
-    "name": "skeleton-app",
+    "homepage": "https://jasmatazzy.github.io/airtable-cross-base-integration/",
+    "name": "airtable-app",
     "version": "0.1.0",
     "private": true,
     "dependencies": {
